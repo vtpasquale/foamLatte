@@ -12,6 +12,18 @@ classdef FiniteVolumeMesh < PolyMesh
         nFacesPerCell % [nCells,1 uint32] number of faces per cell
         nPointsPerCell % [nCells,1 uint32] number of faces per cell
     end
+    properties (Hidden = true) % from processFaceGeometry()
+        faceCentroid % [nFaces,3 double] face centroids
+        Sf % [nFaces,3 double] face normals
+        faceArea % [nFaces,1 double] face areas
+    end
+    properties (Hidden = true) % from processCellGeometry()
+        cellCentroid % [nCells,3 double] cell centroids
+        cellVolume % [nCells,1 double] cell volumes
+    end
+    properties (Hidden = true) % from processFaceInterpolationFactor()
+        interpFactor % [nNeighbours,1 double] face interpolation factor
+    end
     
     methods
         function obj = FiniteVolumeMesh(polyMesh)
@@ -83,6 +95,114 @@ classdef FiniteVolumeMesh < PolyMesh
                         error('There is a mesh issue')
                     end
                 end
+            end            
+        end
+        function obj = processFaceGeometry(obj)
+            % Process face geometry
+            % Following Moukalled, Mangani, and Darwish (2015)
+            nFaces = size(obj.faces,1);            
+            obj.faceCentroid = zeros(nFaces,3);
+            obj.Sf = zeros(nFaces,3);
+            obj.faceArea = zeros(nFaces,1);
+            for i=1:nFaces
+                facePoints = obj.faces{i} + 1;
+                nFacePoints = size(facePoints,2);
+                
+                % a point is constructed within the polygon based on the
+                % average of all the points that define the polygon.
+                % This point is the geometric centre of the polygon xG
+                geometricCenter = mean(obj.points(facePoints,:),1);
+                
+                % Using the geometric centre (Fig. 6.18) a number of 
+                % triangles are formed with the centre as the apex for each
+                % side of the polygon. For each of the triangles, the 
+                % centroid (since for triangles xG and xCE coincide) and 
+                % area are readily computed.
+                centroid = [0, 0, 0];
+                Sf_ = [0, 0, 0];
+                area = 0;
+                %
+                % using the center compute the area and centroid
+                % of virtual triangles based on the centre and the
+                % face nodes
+                %
+                for j=1:nFacePoints
+                    point1 = geometricCenter;
+                    point2 = obj.points( facePoints(j) ,:);
+                    if(j<nFacePoints)
+                        point3 = obj.points( facePoints(j+1) ,:);
+                    else
+                        point3 = obj.points( facePoints(1) ,:);
+                    end
+                    localCentroid = (point1+point2+point3)/3;
+                    localSf = 0.5*cross(point2-point1,point3-point1);
+                    localArea = sqrt(localSf*localSf.');
+                    centroid = centroid + localArea*localCentroid;
+                    Sf_ = Sf_ + localSf;
+                    area = area + localArea;
+                end
+                centroid = centroid/area;
+                %
+                obj.faceCentroid(i,:) = centroid;
+                obj.Sf(i,:) = Sf_;
+                obj.faceArea(i) = area;
+            end
+        end
+        function obj = processCellGeometry(obj)
+            % Process cell geometry
+            % Following Moukalled, Mangani, and Darwish (2015)
+            
+            % The process starts by computing the location of
+            % the geometric centre of the polyhedron element and 
+            % decomposing it into a number of polygonal pyramids.           
+            nCells = size(obj.cellFaces,1);
+            obj.cellCentroid = zeros(nCells,3);
+            obj.cellVolume = zeros(nCells,1);
+            for i = 1:nCells
+                
+                % Compute a rough cell center
+                center = mean(obj.points(obj.cellPoints{i}+1,:),1);
+                
+                % using the centre, compute the area and centroid
+                % of virtual triangles based on the centre and the
+                % face nodes
+                cellFaces_ = obj.cellFaces{i}+1;
+                nCellFaces = size(cellFaces_,2);
+                localVolumeCentroidSum = [0, 0, 0];
+                localVolumeSum = 0;
+                for j=1:nCellFaces
+                    Sf_ = obj.Sf(cellFaces_(j),:);
+                    Cf = obj.faceCentroid(cellFaces_(j),:) - center;
+                    % calculate face-pyramid volume
+                    localVolume = Sf_*Cf.'/3;
+                    if localVolume < 0
+                        localVolume = -1* localVolume;
+                    end
+                    % Calculate face-pyramid centre
+                    localCentroid = 0.75*obj.faceCentroid(cellFaces_(j),:) + 0.25*center;
+                    %Accumulate volume-weighted face-pyramid centre
+                    localVolumeCentroidSum = localVolumeCentroidSum + localCentroid*localVolume;
+                    % Accumulate face-pyramid volume
+                    localVolumeSum = localVolumeSum + localVolume;
+                end
+                centroid = localVolumeCentroidSum/localVolumeSum;
+                volume = localVolumeSum;
+                %
+                obj.cellCentroid(i,:) = centroid;
+                obj.cellVolume(i) = volume;
+            end
+            
+        end
+        function obj = processFaceInterpolationFactor(obj)
+            % Process face interpolation factor (weighting factor)
+            % Following Moukalled, Mangani, and Darwish (2015)
+            nNeighbours = size(obj.neighbour,1);
+            obj.interpFactor = zeros(nNeighbours,1);
+            for i=1:nNeighbours
+                ef = obj.Sf(i,:)./norm(obj.Sf(i,:));
+                dCf = obj.faceCentroid(i,:)-obj.cellCentroid(obj.owner(i)+1,:);
+                dfF = obj.cellCentroid(obj.neighbour(i)+1,:) - obj.faceCentroid(i,:);
+                obj.interpFactor(i) = dCf*ef.' / (dCf*ef.' + dfF*ef.');
             end
         end
         function writeVTK(obj,filename)
