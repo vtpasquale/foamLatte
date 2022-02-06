@@ -8,7 +8,7 @@ classdef Boundary
         name % [char] boundary name
         type % [char] boundary type
         nFaces % [uint32] number of faces
-        startFace % [uint32] boundary start face
+        startFace % [uint32] boundary start face (base 0)
     end
     methods (Static = true)
         function obj = read()

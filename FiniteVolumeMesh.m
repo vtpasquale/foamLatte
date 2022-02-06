@@ -21,8 +21,12 @@ classdef FiniteVolumeMesh < PolyMesh
         cellCentroid % [nCells,3 double] cell centroids
         cellVolume % [nCells,1 double] cell volumes
     end
-    properties (Hidden = true) % from processFaceInterpolationFactor()
+    properties (Hidden = true) % from calculateFaceInterpolationFactor()
         interpFactor % [nNeighbours,1 double] face interpolation factor
+    end
+    properties (Hidden = true) % from calculateGeometricDiffusionCoefficient()
+        gDiff % [nFaces,1 double] geometric diffusion coefficient
+        T % [nFaces,3 double] Nonorthogonal face normal components
     end
     
     methods
@@ -193,8 +197,8 @@ classdef FiniteVolumeMesh < PolyMesh
             end
             
         end
-        function obj = processFaceInterpolationFactor(obj)
-            % Process face interpolation factor (weighting factor)
+        function obj = calculateFaceInterpolationFactor(obj)
+            % Calculate face interpolation factor (weighting factor)
             % Following Moukalled, Mangani, and Darwish (2015)
             nNeighbours = size(obj.neighbour,1);
             obj.interpFactor = zeros(nNeighbours,1);
@@ -205,6 +209,21 @@ classdef FiniteVolumeMesh < PolyMesh
                 obj.interpFactor(i) = dCf*ef.' / (dCf*ef.' + dfF*ef.');
             end
         end
+        function obj = calculateGeometricDiffusionCoefficient(obj)
+            % Calculate geometric diffusion coefficient
+            % Following Moukalled, Mangani, and Darwish (2015)
+            nFaces = size(obj.faces,1);
+            obj.gDiff=zeros(nFaces,1);
+            obj.T=zeros(nFaces,3);
+            for i=1:nFaces
+                dCF = obj.cellCentroid(obj.neighbour(i)+1,:)-obj.cellCentroid(obj.owner(i)+1,:);
+                ndCF = norm(dCF);
+                eCF = dCF./ndCF;
+                E = obj.faceArea(i)*eCF;
+                obj.gDiff(i) = norm(E)/ndCF;
+                obj.T(i,:) = obj.Sf(i,:) - E;
+            end
+        end        
         function writeVTK(obj,filename)
             % Write the mesh to a .vtk file.
             % https://vtk.org/wp-content/uploads/2015/04/file-formats.pdf
@@ -218,7 +237,7 @@ classdef FiniteVolumeMesh < PolyMesh
             fprintf(fid,'%f %f %f\n',obj.points.');
             
             nCells = size(obj.cellFaces,1);
-            fprintf(fid,'CELLS %d %d\n',nCells,nCells+sum(obj.nPointsPerCell) );
+            fprintf(fid,'CELLS %d %d\n',nCells,sum(obj.nPointsPerCell)+nCells);
             for i = 1:nCells
                 fprintf(fid,'%d ',obj.nPointsPerCell(i));
                 fprintf(fid,'%d ',obj.cellPoints{i});
