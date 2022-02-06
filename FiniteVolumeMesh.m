@@ -21,10 +21,8 @@ classdef FiniteVolumeMesh < PolyMesh
         cellCentroid % [nCells,3 double] cell centroids
         cellVolume % [nCells,1 double] cell volumes
     end
-    properties (Hidden = true) % from calculateFaceInterpolationFactor()
-        interpFactor % [nNeighbours,1 double] face interpolation factor
-    end
-    properties (Hidden = true) % from calculateGeometricDiffusionCoefficient()
+    properties (Hidden = true) % from calculateFaceQuantities()
+        interpFactor % [nInteriorFaces,1 double] face interpolation factor
         gDiff % [nFaces,1 double] geometric diffusion coefficient
         T % [nFaces,3 double] Nonorthogonal face normal components
     end
@@ -197,25 +195,23 @@ classdef FiniteVolumeMesh < PolyMesh
             end
             
         end
-        function obj = calculateFaceInterpolationFactor(obj)
+        function obj = calculateFaceQuantities(obj)
             % Calculate face interpolation factor (weighting factor)
             % Following Moukalled, Mangani, and Darwish (2015)
-            nNeighbours = size(obj.neighbour,1);
-            obj.interpFactor = zeros(nNeighbours,1);
-            for i=1:nNeighbours
+            nFaces = size(obj.faces,1);
+            nInteriorFaces = size(obj.neighbour,1);
+            nBoundaryFaces = nFaces - nInteriorFaces;
+            obj.interpFactor = zeros(nInteriorFaces,1);
+            
+            % Interior face quantities
+            obj.gDiff=zeros(nFaces,1);
+            obj.T=zeros(nFaces,3);
+            for i=1:nInteriorFaces
                 ef = obj.Sf(i,:)./norm(obj.Sf(i,:));
                 dCf = obj.faceCentroid(i,:)-obj.cellCentroid(obj.owner(i)+1,:);
                 dfF = obj.cellCentroid(obj.neighbour(i)+1,:) - obj.faceCentroid(i,:);
                 obj.interpFactor(i) = dCf*ef.' / (dCf*ef.' + dfF*ef.');
-            end
-        end
-        function obj = calculateGeometricDiffusionCoefficient(obj)
-            % Calculate geometric diffusion coefficient
-            % Following Moukalled, Mangani, and Darwish (2015)
-            nFaces = size(obj.faces,1);
-            obj.gDiff=zeros(nFaces,1);
-            obj.T=zeros(nFaces,3);
-            for i=1:nFaces
+
                 dCF = obj.cellCentroid(obj.neighbour(i)+1,:)-obj.cellCentroid(obj.owner(i)+1,:);
                 ndCF = norm(dCF);
                 eCF = dCF./ndCF;
@@ -223,6 +219,18 @@ classdef FiniteVolumeMesh < PolyMesh
                 obj.gDiff(i) = norm(E)/ndCF;
                 obj.T(i,:) = obj.Sf(i,:) - E;
             end
+            
+            % Bounary Face Quantities
+            % This approach is deduced; not documented.
+            for i=(nInteriorFaces+1):nBoundaryFaces
+                dCf = obj.faceCentroid(i,:)-obj.cellCentroid(obj.owner(i)+1,:);
+                ndCf = norm(dCf);
+                eCF = dCf./ndCf;
+                E = obj.faceArea(i)*eCF;
+                obj.gDiff(i) = norm(E)/ndCF;
+                obj.T(i,:) = obj.Sf(i,:) - E;
+            end
+            
         end        
         function writeVTK(obj,filename)
             % Write the mesh to a .vtk file.

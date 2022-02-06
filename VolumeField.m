@@ -12,7 +12,21 @@ classdef VolumeField
                 obj.value = valueIn;
             end
         end
-        function gradValue = computeGaussGradient(obj,fvMesh)
+        function faceValue = interpolateValueToInteriorFaces(obj,fvMesh)
+            
+            % get the list of owners and neighbours for all interior faces
+            interiorFaces = 1:fvMesh.boundary(1).startFace;
+            interiorOwners = fvMesh.owner(interiorFaces)+1;
+            interiorNeighbours = fvMesh.neighbour(interiorFaces)+1;
+            
+            % get the geometric factor (interpolation factor)for all interior faces
+            gf = fvMesh.interpFactor(interiorFaces);
+                        
+            % compute the linear interpolation of phi into all interior faces
+            faceValue =   obj.value(interiorNeighbours,:) .* gf ...
+                        + obj.value(interiorOwners,:) .*  (1-gf);
+        end
+        function grad = computeGaussGradient(obj,fvMesh)
             % Compute the Gauss Gradient
             % Following Moukalled, Mangani, and Darwish (2015)
             % [nValues,nDim]=size(obj.value);
@@ -38,12 +52,9 @@ classdef VolumeField
             interiorNeighbours = fvMesh.neighbour(interiorFaces)+1;
             % get the surface vector of all interior faces
             Sf = fvMesh.Sf(interiorFaces,:);
-            % get the geometric factor (interpolation factor)for all interior faces
-            gf = fvMesh.interpFactor(interiorFaces);
                         
             % compute the linear interpolation of phi into all interior faces
-            faceValue =   obj.value(interiorNeighbours,:) .* gf ...
-                        + obj.value(interiorOwners,:) .*  (1-gf);
+            faceValue = obj.interpolateValueToInteriorFaces(fvMesh);
                      
             % loop over faces and add contribution of face flux to the owner and neighbour elements of the faces
             % tricky to vectorize
@@ -66,6 +77,9 @@ classdef VolumeField
             
             %% Divide by cell volume
             gradValue = gradValue./fvMesh.cellVolume;
+            
+            %% Store in VolumeField 
+            grad = VolumeField(['grad_',obj.name],gradValue);
 
         end
         function cellDataToVtk(obj,fvMesh,fid)
