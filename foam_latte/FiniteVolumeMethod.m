@@ -31,12 +31,11 @@ classdef FiniteVolumeMethod
             interiorFaces = 1:fvMesh.boundary(1).startFace;
             interiorOwner = fvMesh.owner(interiorFaces)+1;
             interiorNeighbour = fvMesh.neighbour(interiorFaces)+1;
-            interiorFaces = 1:fvMesh.boundary(1).startFace;
             gDiffInterior = fvMesh.gDiff(interiorFaces);
             TfInterior = fvMesh.T(interiorFaces,:);
             obj.fluxC1(interiorFaces,1) =   obj.gamma .* gDiffInterior;
             obj.fluxC2(interiorFaces,1) = - obj.gamma .* gDiffInterior;
-            obj.fluxV(interiorFaces,1) =  - obj.gamma .* dot(gradInteriorFaceValue,TfInterior,2);
+            obj.fluxV(interiorFaces,1)  = - obj.gamma .* dot(gradInteriorFaceValue,TfInterior,2);
             obj.fluxT(interiorFaces,1) = ...
                 obj.fluxC1(interiorFaces) .* volField.value(interiorOwner) ...
               + obj.fluxC2(interiorFaces) .* volField.value(interiorNeighbour) ...
@@ -47,20 +46,30 @@ classdef FiniteVolumeMethod
             for i = 1:nBoundaries
                 boundaryPatch = fvMesh.boundary(i);
                 faceIndices = boundaryPatch.startFace + (1:boundaryPatch.nFaces);
-                gDiffPatch = fvMesh.gDiff(faceIndices);
-                % TPatch = fvMesh.T(faceIndices,:);
-                ownerPatch = fvMesh.owner(faceIndices)+1;
-                obj.fluxC1(faceIndices) =   obj.gamma.*gDiffPatch;
-                % obj.fluxC2(faceIndices) = - obj.gamma.*gDiffPatch;
-                
-                % specified volField value
-                obj.fluxV(faceIndices)  = zeros(boundaryPatch.nFaces,1);
-                % - obj.gamma.*dot(gradBoundaryPatch,TPatch,2);
-                
-                obj.fluxT(faceIndices,1) = ...
-                      obj.fluxC1(faceIndices) .* volField.value(ownerPatch) ...
-                    + obj.fluxC2(faceIndices) .* volField.value(faceIndices) ...
-                    + obj.fluxV(faceIndices);
+                switch boundaryPatch.conditionType
+                    case 'empty'
+                        obj.fluxC1(faceIndices) = NaN;
+                        obj.fluxC2(faceIndices) = NaN;
+                        obj.fluxV(faceIndices)  = NaN;
+                        obj.fluxT(faceIndices)  = NaN;
+                    case 'fixedValue'
+                        gDiffPatch = fvMesh.gDiff(faceIndices);
+                        % TPatch = fvMesh.T(faceIndices,:);
+                        ownerPatch = fvMesh.owner(faceIndices)+1;
+                        obj.fluxC1(faceIndices) =   obj.gamma.*gDiffPatch;
+                        obj.fluxC2(faceIndices) = - obj.gamma.*gDiffPatch;
+                        
+                        % specified volField value
+                        obj.fluxV(faceIndices)  = zeros(boundaryPatch.nFaces,1);
+                        % - obj.gamma.*dot(gradBoundaryPatch,TPatch,2);
+                        
+                        obj.fluxT(faceIndices,1) = ...
+                              obj.fluxC1(faceIndices) .* volField.value(ownerPatch) ...
+                            + obj.fluxC2(faceIndices) .* volField.value(faceIndices) ...
+                            + obj.fluxV(faceIndices);
+                    otherwise
+                        error('Boundary Condition Type %s unsupported.',boundaryPatch.conditionType)
+                end
                 
             end
             
@@ -84,7 +93,8 @@ classdef FiniteVolumeMethod
             
             % Fluxes of boundary faces
             allBoundaryFaces = (fvMesh.boundary(1).startFace+1):nFaces;
-            for i=allBoundaryFaces
+            allNonEmptyBoundaryFaces = allBoundaryFaces(~isnan(obj.fluxC1(allBoundaryFaces)));
+            for i=allNonEmptyBoundaryFaces
                 gDof = fvMesh.owner(i)+1;
                 aLocal =   obj.fluxC1(i);
                 bLocal = - obj.fluxT(i);

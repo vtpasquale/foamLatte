@@ -100,7 +100,7 @@ classdef VolumeField
     end
     methods (Static=true)
         function obj = constructFromEquation(nameIn,fvMesh,functionHandle)
-            % create field from functionHandle = @(x,z,y)
+            % construct field from functionHandle = @(x,z,y)
             nDimensions = size( functionHandle(0,0,0), 2);
             nCells = size(fvMesh.cellFaces,1);
             nValues = fvMesh.boundary(end).startFace + fvMesh.boundary(end).nFaces;

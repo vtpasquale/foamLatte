@@ -25,7 +25,7 @@ classdef PolyMesh
     methods (Static = true, Access = private)
         function faces = readFaces()
             % function to read polyMesh faces file
-            fileString = fileread(fullfile('polyMesh','faces'));
+            fileString = fileread(fullfile('constant','polyMesh','faces'));
             faceData = regexp(fileString,'\(\s*(?<points>[^\n()]+)\s*\)','names');
             nFaces = size(faceData,2);
             for i = nFaces:-1:1
@@ -34,25 +34,25 @@ classdef PolyMesh
         end
         function neighbour = readNeighbour()
             % function to read polyMesh neighbour file
-            fileString = fileread(fullfile('polyMesh','neighbour'));
+            fileString = fileread(fullfile('constant','polyMesh','neighbour'));
             elementList = regexp(fileString,'\((?<element>[^()])+\)','names');
             neighbour= uint32( sscanf(elementList.element,'%d') );
         end
         function owner = readOwner()
             % function to read polyMesh owner file
-            fileString = fileread(fullfile('polyMesh','owner'));
+            fileString = fileread(fullfile('constant','polyMesh','owner'));
             elementList = regexp(fileString,'\((?<element>[^()])+\)','names');
             owner = uint32( sscanf(elementList.element,'%d') );
         end
         function points = readPoints()
-            fileString = fileread(fullfile('polyMesh','points'));
+            fileString = fileread(fullfile('constant','polyMesh','points'));
             pointData = regexp(fileString,'\s*\(\s*(?<x>[^ \s()]+)\s+(?<y>[^ \s()]+)\s+(?<z>[^ \s()]+)\s*\)','names');
             nPoints = size(pointData,2);
             points = zeros(nPoints,3);
             for i = 1:nPoints
                 points(i,:) = [sscanf(pointData(i).x,'%f'),...
-                              sscanf(pointData(i).y,'%f'),...
-                              sscanf(pointData(i).z,'%f')];
+                               sscanf(pointData(i).y,'%f'),...
+                               sscanf(pointData(i).z,'%f')];
             end
         end
     end

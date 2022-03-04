@@ -222,12 +222,12 @@ classdef FiniteVolumeMesh < PolyMesh
             
             % Bounary Face Quantities
             % This approach is deduced; not documented.
-            for i=(nInteriorFaces+1):nBoundaryFaces
+            for i=(nInteriorFaces+1):nFaces
                 dCf = obj.faceCentroid(i,:)-obj.cellCentroid(obj.owner(i)+1,:);
                 ndCf = norm(dCf);
                 eCF = dCf./ndCf;
                 E = obj.faceArea(i)*eCF;
-                obj.gDiff(i) = norm(E)/ndCF;
+                obj.gDiff(i) = norm(E)/ndCf;
                 obj.T(i,:) = obj.Sf(i,:) - E;
             end
             
