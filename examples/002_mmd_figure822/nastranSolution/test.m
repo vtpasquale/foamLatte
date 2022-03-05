@@ -16,8 +16,10 @@ nNodes = size(nodes,1);
 if ~isa(nodes,'Node'); error('Scalor points not allowed.'); end
 
 %% Convert elements to thermal
-teaCquad4 = TeaCquad4(elements);
-cofe.model.element = teaCquad4;
+% teaCquad4 = TeaCquad4(elements);
+% cofe.model.element = teaCquad4;
+fvCquad4 = FvCquad4(elements);
+cofe.model.element = fvCquad4;
 
 %% CoFE SOL 101 Process
 % Assemble model
@@ -35,4 +37,4 @@ cofe.solution = cofe.solution.solve(cofe.model);
 % hdf5.export(['obliqueParallelogram','.h5']);
 
 vtkFile = VtkFile(cofe);
-vtkFile.print('obliqueParallelogram.vtk')
+vtkFile.print('fvObliqueParallelogram.vtk')

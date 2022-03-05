@@ -2,7 +2,7 @@
 % 
 % Anthony Ricciardi
 %
-classdef TeaCquad4 < Element
+classdef FvCquad4 < Element
     
     properties
         eid % [uint32] Element identification number.
@@ -38,18 +38,18 @@ classdef TeaCquad4 < Element
         TEMP_DOF = uint8(1:6:24); % Temperature DOF
     end
     methods
-        function obj = TeaCquad4(cquad4)
+        function obj = FvCquad4(cquad4)
             % Construct from Cquad4 object array
             if nargin > 0
                 if ~isa(cquad4,'Cquad4'); error('Input must be type Cquad4'); end
                 nElements = size(cquad4,1);
                 for i = 1:nElements
-                    teaCquad4 = TeaCquad4;
-                    teaCquad4.eid = cquad4(i).eid;
-                    teaCquad4.pid = cquad4(i).pid;
-                    teaCquad4.g = cquad4(i).g;
-                    teaCquad4.tFlag = cquad4(i).tFlag;
-                    obj(i,1) = teaCquad4;
+                    fvCquad4 = FvCquad4;
+                    fvCquad4.eid = cquad4(i).eid;
+                    fvCquad4.pid = cquad4(i).pid;
+                    fvCquad4.g = cquad4(i).g;
+                    fvCquad4.tFlag = cquad4(i).tFlag;
+                    obj(i,1) = fvCquad4;
                 end
             end
         end
@@ -97,8 +97,40 @@ classdef TeaCquad4 < Element
                 end
             end
             
-            % Four-point integration
+            % Four-point surface evaluation
             conductivityMatrix = zeros(4);
+            % % Face integration points
+            XiS  = [-0.5, 0.0, 0.5, 0.0];
+            EtaS = [ 0.0,-0.5, 0.0, 0.5];
+            
+            % Face-node connectivity 
+            faceNodeConnect = [1,4; 2,1; 3,2; 4,3];
+            
+            % Loop over median dual volume faces
+            for i = 1:4
+                edgePoint = 0.5*( x2D_e(:,faceNodeConnect(i,1)) + x2D_e(:,faceNodeConnect(i,2)) );
+                faceLength = sqrt( edgePoint.'*edgePoint ); % [edgePoint-centerPoint] = edgePoint;
+                
+                [N,dNdxi,dNdeta] = FvCquad4.evaluateShapeFunctions(XiS(i),EtaS(i));
+                [~,~,invJ] =    FvCquad4.calculateJacobian2D(dNdxi,dNdeta,x2D_e);
+                faceCenterLocation = 0.5*edgePoint; % check faceCenterLocation = N*x2D_e.';
+                faceCenterThickness = N*tNodes;
+                
+                % compute face normal
+                faceNormal = cross([faceCenterLocation;0],[0;0;1]);
+                faceNormal = faceNormal./sqrt(faceNormal.'*faceNormal);
+                if abs(faceNormal(3)) > eps; error('warped element'); end
+                faceNormal = faceNormal(1:2).' ;
+                
+                % flux through face
+                kDTnDS = k*faceCenterThickness*faceLength*...
+                         faceNormal*invJ*[dNdxi;dNdeta] ;
+                conductivityMatrix(faceNodeConnect(i,:),:) = ...
+                    conductivityMatrix(faceNodeConnect(i,:),:) + ...
+                    [kDTnDS; -kDTnDS];
+            end                  
+            
+            % Four-point volume integration
             consistentMass = zeros(4);
             obj.volume = 0;
             obj.area = 0;
@@ -107,17 +139,11 @@ classdef TeaCquad4 < Element
             for i = 1:4
                 
                 % Gauss point evaluation
-                [N,dNdxi,dNdeta] = TeaCquad4.evaluateShapeFunctions(Xi(i),Eta(i));
-                [J,detJ,invJ] =    TeaCquad4.calculateJacobian2D(dNdxi,dNdeta,x2D_e);
-                dNdxy = invJ*[dNdxi;dNdeta];
-                dNdx = dNdxy(1,:);
-                dNdy = dNdxy(2,:);
+                [N,dNdxi,dNdeta] = FvCquad4.evaluateShapeFunctions(Xi(i),Eta(i));
+                [J,detJ,invJ] =    FvCquad4.calculateJacobian2D(dNdxi,dNdeta,x2D_e);
                 
                 % Thickness at point
                 tGauss = N * tNodes;
-                
-                % Consistent mass matrix integration
-                conductivityMatrix = conductivityMatrix + tGauss * k*(dNdx.'*dNdx + dNdy.'*dNdy)*detJ;
                 
                 % Conductivity matrix integration
                 consistentMass = consistentMass + N.'*N*(pshell.nsm+pshell.rho*tGauss)*detJ;
